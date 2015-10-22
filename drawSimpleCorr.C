@@ -67,17 +67,16 @@ void drawSimpleCorr()
     AliJBin * Cent[2], * Vtx[2], * Eta[2], * Phi[2], * PTt[2], * PTa[2];
     int NumCent[2], NumVtx[2], NumPtt[2], NumPta[2], NumEta[2], NumPhi[2];
     int NSetup[2];
-    int NCentrality[] = {1, 5};     // [pp/AA]
 
     TString jdir = "../data/processed/";
-    inName[0][0] = "corr_pp_LHC11aAOD113_GlobalSDD_PhiCut1dot6.root";
-    inName[0][1] = "corr_pp_LHC11aAOD113_GlobalSDD_PhiCut0dot5.root";
-    inName[0][2] = "corr_pp_LHC11aAOD113_GlobalSDD_PhiCut0dot2.root";
+    inName[0][0] = "simplecorr_pp_LHC11aAOD113_GlobalSDD_PhiCut1dot6.root";
+    inName[0][1] = "simplecorr_pp_LHC11aAOD113_GlobalSDD_PhiCut0dot5.root";
+    inName[0][2] = "simplecorr_pp_LHC11aAOD113_GlobalSDD_PhiCut0dot2.root";
     NSetup[0] = 3;
 
-    inName[1][0] = "corr_PbPb_LHC10hAOD86RL1_TPCOnly_PhiCut1dot6VSkip-8.root";
-    inName[1][1] = "corr_PbPb_LHC10hAOD86RL1_TPCOnly_PhiCut0dot5VSkip-8.root";
-    inName[1][2] = "corr_PbPb_LHC10hAOD86RL1_TPCOnly_PhiCut0dot2VSkip-8.root";
+    inName[1][0] = "simplecorr_PbPb_LHC10hAOD86RL2_TPCOnly_PhiCut1dot6VSkip-8dot0.root";
+    inName[1][1] = "simplecorr_PbPb_LHC10hAOD86RL2_TPCOnly_PhiCut0dot5VSkip-8dot0.root";
+    inName[1][2] = "simplecorr_PbPb_LHC10hAOD86RL2_TPCOnly_PhiCut0dot2VSkip-8dot0.root";
     NSetup[1] = 3;
 
     for(int itype=0; itype<2; itype++){
@@ -97,10 +96,11 @@ void drawSimpleCorr()
         Eta[itype]  = hst[itype]->GetBin("EtaGap"); NumEta[itype]  = Eta[itype]->Size();
         Phi[itype]  = hst[itype]->GetBin("PhiGap"); NumPhi[itype]  = Phi[itype]->Size();
     }
+        NumCent[1]=2;
     cout << "loading input files done..." << endl;
 
     // load histos
-    const int kF=3; const int kC=5;
+    const int kF=3; const int kC=2;
     const int kS=4;const int kT=5; const int kA=5;
     TH1D * hDEtaRealFlip[kT][kS][kC][kT][kA];           // [Type][Setup]         [Cent][PTt][PTa]
     TH1D * hDEtaReal[kT][kS][kC][kT][kA];               // [Type][Setup]         [Cent][PTt][PTa]
@@ -124,6 +124,7 @@ void drawSimpleCorr()
     double PTaBo[] = {2, 3, 4, 6, 8, 10};
     int NumPtaNew = 5;
 
+    TString ct, cta;
     for(int itype=0; itype<2; itype++){
         for(int isetup=0; isetup<NSetup[itype]; isetup++){
             for(int ic=0; ic<NumCent[itype]; ic++){
@@ -133,27 +134,38 @@ void drawSimpleCorr()
                         if( PTtBo[iptt] < PTaBo[ipta] )
                             continue;
 
-                        hDEtaRealFlip[itype][isetup][ic][iptt][ipta] = (TH1D*)inFile[itype][isetup]->Get(Form("hDEtaRealFlip_C%.0fT%.0fA%.0f", Cent[itype]->At(ic),PTtBo[iptt],PTaBo[ipta]));
-                        hDEtaReal[itype][isetup][ic][iptt][ipta] = (TH1D*)inFile[itype][isetup]->Get(Form("hDEtaReal_C%.0fT%.0fA%.0f", Cent[itype]->At(ic),PTtBo[iptt],PTaBo[ipta]));
-                        hDEtaRawFlip[itype][isetup][ic][iptt][ipta] = (TH1D*)inFile[itype][isetup]->Get(Form("hDEtaRawFlip_C%.0fT%.0fA%.0f", Cent[itype]->At(ic),PTtBo[iptt],PTaBo[ipta]));
-                        hDEtaRaw[itype][isetup][ic][iptt][ipta] = (TH1D*)inFile[itype][isetup]->Get(Form("hDEtaRaw_C%.0fT%.0fA%.0f", Cent[itype]->At(ic),PTtBo[iptt],PTaBo[ipta]));
-                        hDEtaRealFlip[itype][isetup][ic][iptt][ipta]->Sumw2(); hDEtaReal[itype][isetup][ic][iptt][ipta]->Sumw2();
-                        hDEtaRawFlip[itype][isetup][ic][iptt][ipta]->Sumw2(); hDEtaRaw[itype][isetup][ic][iptt][ipta]->Sumw2();
+                        ct  = Form("C%.0fT%.0f",Cent[itype]->At(ic), PTtBo[iptt]);
+                        cta = Form("C%.0fT%.0fA%.0f",Cent[itype]->At(ic), PTtBo[iptt], PTaBo[ipta]);
 
-                        ffit[itype][isetup][0][ic][iptt][ipta] = (TF1*)inFile[itype][isetup]->Get(Form("ffit_GC_C%.0fT%.0fA%.0f",  Cent[itype]->At(ic),PTtBo[iptt],PTaBo[ipta]));
-                        ffit[itype][isetup][1][ic][iptt][ipta] = (TF1*)inFile[itype][isetup]->Get(Form("ffit_GGC_C%.0fT%.0fA%.0f", Cent[itype]->At(ic),PTtBo[iptt],PTaBo[ipta]));
-                        ffit[itype][isetup][2][ic][iptt][ipta] = (TF1*)inFile[itype][isetup]->Get(Form("ffit_KC_C%.0fT%.0fA%.0f",  Cent[itype]->At(ic),PTtBo[iptt],PTaBo[ipta]));
+                        cout << "loading: " << cta << endl; 
+                        hDEtaRealFlip[itype][isetup][ic][iptt][ipta] = (TH1D*)inFile[itype][isetup]->Get("hDEtaRealFlip_"+cta);
+                        hDEtaRealFlip[itype][isetup][ic][iptt][ipta]->Print();
+                        hDEtaReal[itype][isetup][ic][iptt][ipta] = (TH1D*)inFile[itype][isetup]->Get("hDEtaReal_"+cta);
+                        hDEtaReal[itype][isetup][ic][iptt][ipta]->Print();
+                        hDEtaRawFlip[itype][isetup][ic][iptt][ipta] = (TH1D*)inFile[itype][isetup]->Get("hDEtaRawFlip_"+cta);
+                        hDEtaRawFlip[itype][isetup][ic][iptt][ipta]->Print();
+                        hDEtaRaw[itype][isetup][ic][iptt][ipta] = (TH1D*)inFile[itype][isetup]->Get("hDEtaRaw_"+cta);
+
+                        
+                        hDEtaRealFlip[itype][isetup][ic][iptt][ipta]->Sumw2(); 
+                        hDEtaReal[itype][isetup][ic][iptt][ipta]->Sumw2();
+                        hDEtaRawFlip[itype][isetup][ic][iptt][ipta]->Sumw2(); 
+                        hDEtaRaw[itype][isetup][ic][iptt][ipta]->Sumw2();
+
+                        ffit[itype][isetup][0][ic][iptt][ipta] = (TF1*)inFile[itype][isetup]->Get("ffit_GC_"+cta);
+                        ffit[itype][isetup][1][ic][iptt][ipta] = (TF1*)inFile[itype][isetup]->Get("ffit_GGC_"+cta);
+                        ffit[itype][isetup][2][ic][iptt][ipta] = (TF1*)inFile[itype][isetup]->Get("ffit_KC_"+cta);
                     }
-                    hYield[itype][isetup][0][ic][iptt] = (TH1D*)inFile[itype][isetup]->Get(Form("hYield_GC_C%.0fT%.0f",  Cent[itype]->At(ic), PTtBo[iptt]));
-                    hYield[itype][isetup][1][ic][iptt] = (TH1D*)inFile[itype][isetup]->Get(Form("hYield_GGC_C%.0fT%.0f", Cent[itype]->At(ic), PTtBo[iptt]));
-                    hYield[itype][isetup][2][ic][iptt] = (TH1D*)inFile[itype][isetup]->Get(Form("hYield_KC_C%.0fT%.0f",  Cent[itype]->At(ic), PTtBo[iptt]));
+                    hYield[itype][isetup][0][ic][iptt] = (TH1D*)inFile[itype][isetup]->Get("hYield_GC_"+ct);
+                    hYield[itype][isetup][1][ic][iptt] = (TH1D*)inFile[itype][isetup]->Get("hYield_GGC_"+ct);
+                    hYield[itype][isetup][2][ic][iptt] = (TH1D*)inFile[itype][isetup]->Get("hYield_KC_"+ct);
                     hYield[itype][isetup][0][ic][iptt]->Sumw2(); 
                     hYield[itype][isetup][1][ic][iptt]->Sumw2(); 
                     hYield[itype][isetup][2][ic][iptt]->Sumw2(); 
 
-                    hYield_Int[itype][isetup][0][ic][iptt] = (TH1D*)inFile[itype][isetup]->Get(Form("hYield_INT_GC_C%.0fT%.0f", Cent[itype]->At(ic), PTtBo[iptt]));
-                    hYield_Int[itype][isetup][1][ic][iptt] = (TH1D*)inFile[itype][isetup]->Get(Form("hYield_INT_GGC_C%.0fT%.0f",Cent[itype]->At(ic), PTtBo[iptt]));
-                    hYield_Int[itype][isetup][2][ic][iptt] = (TH1D*)inFile[itype][isetup]->Get(Form("hYield_INT_KC_C%.0fT%.0f", Cent[itype]->At(ic), PTtBo[iptt]));
+                    hYield_Int[itype][isetup][0][ic][iptt] = (TH1D*)inFile[itype][isetup]->Get("hYield_INT_GC_"+ct);
+                    hYield_Int[itype][isetup][1][ic][iptt] = (TH1D*)inFile[itype][isetup]->Get("hYield_INT_GGC_"+ct);
+                    hYield_Int[itype][isetup][2][ic][iptt] = (TH1D*)inFile[itype][isetup]->Get("hYield_INT_KC_"+ct);
                     hYield_Int[itype][isetup][0][ic][iptt]->Sumw2();
                     hYield_Int[itype][isetup][1][ic][iptt]->Sumw2();
                     hYield_Int[itype][isetup][2][ic][iptt]->Sumw2();
@@ -193,7 +205,7 @@ void drawSimpleCorr()
                 for(int iptt=0; iptt<NumPttNew; iptt++){
                 // ---------
                     for(int ipta=0; ipta<NumPtaNew; ipta++){
-                        if( PTtBo[iptt] <= PTaBo[ipta] )
+                        if( PTtBo[iptt] < PTaBo[ipta] )
                             continue;
 
                         MPlot * meta = new MPlot(iplot++, "|#Delta#eta|", "1/N_{trigg.}dN/d|#Delta#eta|", false);
@@ -214,7 +226,7 @@ void drawSimpleCorr()
                         ymin = const_KC;
                         height = ymax-ymin;
                         
-                        meta->SetLimitsXY(0, 1.6, ymin-height*0.1, ymax+height*0.2);
+//                        meta->SetLimitsXY(0, 1.6, ymin-height*0.1, ymax+height*0.2);
                        
                         meta->AddInfo( Types[itype] );
                         if(itype==1) meta->AddInfo( Form("Cent: %.0f-%.0f %%",Cent[1]->At(ic), Cent[1]->At(ic+1))); 
@@ -239,6 +251,7 @@ void drawSimpleCorr()
 
                         meta->AddThisEntry( ffit[itype][isetup][2][ic][iptt][ipta], "Kaplan+const. fit", "l");
                         meta->AddThisEntry( (TObject*)0, Form("#chi^{2}/NDF=%.1f/%d",ffit[itype][isetup][2][ic][iptt][ipta]->GetChisquare(),ffit[itype][isetup][2][ic][iptt][ipta]->GetNDF()), "" );
+                        meta->AddThisEntry( (TObject*)0, Form("yield=%.2f",hYield[itype][isetup][2][ic][iptt]->GetBinContent(ipta+1)), "");
 
                         meta->DrawThisTF1( (TF1*)ffit[itype][isetup][0][ic][iptt][ipta], "same" );
                         meta->DrawThisTF1( (TF1*)ffit[itype][isetup][1][ic][iptt][ipta], "same" );
@@ -246,7 +259,7 @@ void drawSimpleCorr()
                         meta->DrawThis( lGC, "same" );
                         meta->DrawThis( lKC, "same" );
 
-                        meta->Save(Form("figs/PubYield/PubYied_%s_S0%d_C0%dT0%dA0%d", Types[itype].Data(), isetup, ic, iptt, ipta));
+                        meta->Save(Form("figs/corr/PubYied_%s_S0%d_C0%dT0%dA0%d", Types[itype].Data(), isetup, ic, iptt, ipta));
 
 
                     } // PTa
@@ -270,18 +283,19 @@ void drawSimpleCorr()
             MPlot * myp1 = new MPlot(iplot++, "p_{T, assoc} [GeV]", "yield", true);
             hList   = { hYield[0][2][ifit][ic][iptt], hYield[1][2][ifit][ic][iptt] };
             legList = { "p-p |#phi|<0.2", "Pb-Pb |#phi|<0.2" };
-            myp1->addHList(hList, legList, "l");
+            myp1->addHList(hList, legList, "PE");
             myp1->Draw();
             myp1->AddInfo( fitnames[ifit].Data() );
             myp1->AddInfo( Form("Cent: %.0f-%.0f %%",Cent[1]->At(ic), Cent[1]->At(ic+1))); 
             myp1->AddInfo( Form("p_{Tt}#in %.0f-%.0f GeV", PTtBo[iptt], PTtBo[iptt+1]) );
-            myp1->SetRatioLimitsXY(2, 10, 0, 2.5);
-            myp1->Save(Form("figs/PubYield/Yield_ppAA_FIT%d_C0%d", ifit, ic));
+            myp1->SetRatioLimitsXY(3, 10, 0, 2.5);
+            myp1->Save(Form("figs/iaa/Yield_ppAA_FIT%d_C0%d", ifit, ic));
+
             // draw IAA --------------------
             MPlot * myp = new MPlot(iplot++, "p_{T, assoc} [GeV]", "I_{AA}", false);
-            hList   = { hIAA[1][ifit][ic][iptt], hIAA[2][ifit][ic][iptt], hIAA_Int[1][ifit][ic][iptt], hIAA_Int[2][ifit][ic][iptt] };
-            legList = { "#phi<0.5 |v_{z}|<8",    "#phi<0.2 |v_{z}|<8", "INT: #phi<0.5 |v_{z}|<8",    "INT: #phi<0.2 |v_{z}|<8" };
-            myp->addHList(hList, legList, "l");
+            hList   = { hIAA[2][ifit][ic][iptt], hIAA_Int[2][ifit][ic][iptt] };
+            legList = { "#phi<0.2 |v_{z}|<8", "INT: #phi<0.2 |v_{z}|<8" };
+            myp->addHList(hList, legList, "PE");
             myp->Draw();
             myp->AddInfo( fitnames[ifit].Data() );
             myp->AddInfo( Form("Cent: %.0f-%.0f %%",Cent[1]->At(ic), Cent[1]->At(ic+1))); 
@@ -293,7 +307,7 @@ void drawSimpleCorr()
             myp->DrawThisTGraphAsymmErrors( gPubIAA_c[1], "PE same", 25, 1 );
             myp->DrawThisTGraphAsymmErrors( gPubIAA_c[2], "PE same", 26, 1 );
             myp->SetLimitsXY(3,10,0,2.5);
-            myp->Save(Form("figs/PubYield/IAA_FIT%d_C0%d", ifit, ic));
+            myp->Save(Form("figs/iaa/IAA_FIT%d_C0%d", ifit, ic));
         }
     }
 
@@ -306,6 +320,10 @@ void drawSimpleCorr()
     // ptt: 0:4-6, 1:6-8, 2:8-15
     // pta: 0:2-3, 1:3-4, 2:4-6, 3:6-8, 4:8-10
 
+    return;
+
+
+
     MTools * mt = new MTools();
     cout << "filip's histos loaded..." << endl << "subtract constant and merge cent" << endl;
     for(int itype=0; itype<2; itype++){
@@ -316,7 +334,7 @@ void drawSimpleCorr()
                     if( PTtBo[iptt] < PTaBo[ipta] )
                         continue;
 
-                    for(int ic=0; ic<NumCent[itype]; ic++){
+                    for(int ic=0; ic<1; ic++){
                         cout << ic << "\t" << iptt << "\t" << ipta << endl;
                         mt->subtractConstTH1( hDEtaRealFlip[itype][isetup][ic][iptt][ipta], ffit[itype][isetup][0][ic][iptt][ipta]->GetParameter(0) ); // subtract const of Gauss fit
                         mt->subtractConstTH1( hDEtaRawFlip[itype][isetup][ic][iptt][ipta], ffit[itype][isetup][0][ic][iptt][ipta]->GetParameter(0) ); // subtract const of Gauss fit
@@ -360,7 +378,7 @@ void drawSimpleCorr()
                         metaFilip->AddInfo( Form("p_{Tt}#in %.0f-%.0f GeV", PTtBo[iptt], PTtBo[iptt+1]) );
                         metaFilip->AddInfo( Form("p_{Ta}#in %.0f-%.0f GeV", PTaBo[ipta], PTaBo[ipta+1]) );
                         metaFilip->SetRatioLimitsXY(0,1.6,-2,3);
-                        metaFilip->Save(Form("figs/PubYield/PubYied_Filip_%s_S0%d_C0%dT0%dA0%d", Types[itype].Data(), isetup, ic_ours, iptt, ipta));
+                        metaFilip->Save(Form("figs/filip/PubYied_Filip_%s_S0%d_C0%dT0%dA0%d", Types[itype].Data(), isetup, ic_ours, iptt, ipta));
                     }
                 }
             }
@@ -407,14 +425,14 @@ void drawSimpleCorr()
 
                 miaa->addHList(hList, legList, "PE", "p");
                 miaa->SetLimitsXY(0, 0.28, 0.0, 2.5);
-                miaa->SetAppearance( hfilip[1]->hIAA[ic-1][iptt][ipta], 2, 2, 24 );
+                miaa->SetAppearance( hfilip[1]->hIAA[ic-1][iptt][ipta], 1, 1, 24 );
                 miaa->Draw();
                 
                 miaa->SetRatioLimitsXY(0, 0.28, 0.5, 1.5);
                 miaa->AddInfo( Form("Cent: %.0f-%.0f %%",CentBo[ic-1], CentBo[ic])); 
                 miaa->AddInfo( Form("p_{Tt}#in %.0f-%.0f GeV", PTtBo[iptt], PTtBo[iptt+1]) );
                 miaa->AddInfo( Form("p_{Ta}#in %.0f-%.0f GeV", PTaBo[ipta], PTaBo[ipta+1]) );
-                miaa->Save(Form("figs/PubYield/IAA_DEta_Filip_C0%dT0%dA0%d", ic, iptt, ipta));
+                miaa->Save(Form("figs/filip/IAA_DEta_Filip_C0%dT0%dA0%d", ic, iptt, ipta));
             }
         }
     }
@@ -439,7 +457,7 @@ void drawSimpleCorr()
                 miaa_filip->SetRatioLimitsXY(0, 0.28, 0.7, 1.3);
             miaa_filip->AddInfo( Form("p_{Tt}#in %.0f-%.0f GeV", PTtBo[iptt], PTtBo[iptt+1]) );
             miaa_filip->AddInfo( Form("p_{Ta}#in %.0f-%.0f GeV", PTaBo[ipta], PTaBo[ipta+1]) );
-            miaa_filip->Save(Form("figs/PubYield/IAA_DEta_FilipVSFilip_C0%dT0%dA0%d", 0, iptt, ipta));
+            miaa_filip->Save(Form("figs/filip/IAA_DEta_FilipVSFilip_C0%dT0%dA0%d", 0, iptt, ipta));
         }
     }
 

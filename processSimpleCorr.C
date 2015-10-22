@@ -5,6 +5,7 @@
  * with TPCOnly cut, in pTt 8-15, pTa 3-4, 4-6, 6-8, 8-10 GeV
  */
 
+// TODO add guards
 #include "../inc/AliJHistManagerROOT6.cxx"
 #include "../inc/mfit.h"
 #include "../inc/mtools.h"
@@ -14,6 +15,9 @@
 //
 class MSimpleCorr
 {
+    private:
+        TFile * fInFile;
+
     public:
         AliJBin *fCent, *fVtx, *fPTt, *fPTa, *fEta, *fPhi;  
         int fNumPhi, fNumEta, fNumPta, fNumPtt, fNumVtx, fNumCent;
@@ -35,8 +39,8 @@ class MSimpleCorr
             fPtaPublishedBins[0]=2;fPtaPublishedBins[1]=3;fPtaPublishedBins[2]=4;fPtaPublishedBins[3]=6;fPtaPublishedBins[4]=8;fPtaPublishedBins[5]=10;
             TrackCut = trackC;
 
-            TFile * InFile = TFile::Open(inName);
-            InFile->cd(); //InFile->ls();
+            fInFile = TFile::Open(inName);
+            fInFile->cd(); //InFile->ls();
 
             // hist manager and histos from input file
             fhst = new AliJHistManager( "hst" );
@@ -60,27 +64,52 @@ class MSimpleCorr
             if( inName.Contains("pp") )   type = "pp";
             if( inName.Contains("PbPb") ) type = "PbPb";
 
+            type=="PbPb" ? fNumCent = 2 : fNumCent=1;
+
             cout << "initialization done..." << endl;
             LoadNtrigg();
         }
 
-        // output containers
-        TH1D * hDEtaRaw[5][5][5];       // [Cent][PTt][Pta]
-        TH1D * hDEtaMix[5][5][5];       // [Cent][PTt][Pta]
-        TH1D * hDEtaReal[5][5][5];      // [Cent][PTt][Pta]
+        // DESTRUCTOR
+        ~MSimpleCorr() 
+        {
+            for(int iptt=1; iptt<fNumPtt; iptt++){
+                for(int ic=0; ic<fNumCent; ic++){
+                    for(int ipta=0; ipta<fNumPta; ipta++){
+                        if( fPTt->At(iptt) < fPTa->At(ipta) )
+                            continue;
+                        delete hDEtaRaw[ic][iptt][ipta], hDEtaMix[ic][iptt][ipta], hDEtaReal[ic][iptt][ipta];
+                    }
+                    for(int ipta_new=0; ipta_new<fNumPtaPublished; ipta_new++){
+                        if( fPTt->At(iptt) < fPtaPublishedBins[ipta_new] )
+                            continue;
+                        delete hDEtaRawNew[ic][iptt][ipta_new], hDEtaRealNew[ic][iptt][ipta_new], hDEtaMixNew[ic][iptt][ipta_new], hDEtaRawFlip[ic][iptt][ipta_new], hDEtaRealFlip[ic][iptt][ipta_new];
+                    }
+                    for(int ifit=0; ifit<kF; ifit++){
+                        delete hYield[ifit][ic][iptt], hYield_Int[ifit][ic][iptt];
+                    }
+                }
+            }
+            fInFile->Close();
+        }
+
+
+
+        const static int kT=5, kA=10, kC=5, kS=3, kF=3;
+        // correlation histos: eta 
+        TH1D * hDEtaRaw[kC][kT][kA], * hDEtaMix[kC][kT][kA], * hDEtaReal[kC][kT][kA];
 
         // output histos with new pta binning
-        TH1D * hYield[3][5][5];         // [FitType][Cent][PTt]
-        TH1D * hYield_Int[3][5][5];     // [FitType][Cent][PTt] (yield calculated by integrating histograms. Constans estimated from the different fits.)
-        TH1D * hDEtaRawNew[5][5][5];    // [Cent][PTt][Pta] (rebinned for published PTa bins
-        TH1D * hDEtaRealNew[5][5][5];   // [Cent][PTt][Pta] (rebinned for published PTa bins
-        TH1D * hDEtaMixNew[5][5][5];    // [Cent][PTt][Pta] (rebinned for published PTa bins
-        TH1D * hDEtaRawFlip[5][5][5];   // [Cent][PTt][Pta] (rebinned for published PTa bins
-        TH1D * hDEtaRealFlip[5][5][5];  // [Cent][PTt][Pta] (rebinned for published PTa bins
+        TH1D * hYield[kF][kC][kT];
+        // yield calculated by integrating histograms. Constans estimated from the different fits.
+        TH1D * hYield_Int[kF][kC][kT];  
+
+        TH1D * hDEtaRawNew[kC][kT][kA], * hDEtaRealNew[kC][kT][kA], * hDEtaMixNew[kC][kT][kA],
+             * hDEtaRawFlip[kC][kT][kA], * hDEtaRealFlip[kC][kT][kA];  
 
         // ----------- loading ntrigg:
-        double NTrigg[5][5];     // [Cent][PTt]
-        TH1D * hTriggVSum[5][5]; // [Cent][PTt]
+        double NTrigg[kC][kT];     
+        TH1D * hTriggVSum[kC][kT]; 
 
         void LoadNtrigg(){
             for(int ic=0; ic<fNumCent; ic++){
@@ -96,46 +125,26 @@ class MSimpleCorr
             cout << "loading ntrigg done... " << endl;
         }
 
-        // ----------- print bin content to check for zeros:
-        void CheckBins() {
-            int nbins_out;
-            double x,y,yerr;
-            int iptt = fPTt->GetBin(8.); 
-            int ic = 0;
-
-            for(int ipta=0; ipta<fNumPta; ipta++){
-                ofstream out;
-                out.open(Form("figs/PubYield/%s_%d_%d.txt", type.Data(),ic,ipta));
-                for(int iv=fVertexSkip; iv<(fNumVtx-fVertexSkip); iv++) {
-                    for(int ip=0; ip<(fPhiSkip); ip++) {
-                        // QA of bin content:
-                        out << "##" << endl;
-                        out << "iv = " << iv << "  ip = " <<  ip << endl;
-                        nbins_out = fhDEtaNearRaw[ic][iv][ip][iptt][ipta]->GetNbinsX();
-                        for(int ib=0; ib<nbins_out; ib++){
-                            x = fhDEtaNearRaw[ic][iv][ip][iptt][ipta]->GetBinCenter(ib+1);
-                            y = fhDEtaNearRaw[ic][iv][ip][iptt][ipta]->GetBinContent(ib+1);
-                            yerr = fhDEtaNearRaw[ic][iv][ip][iptt][ipta]->GetBinError(ib+1);
-                            out << "\t\t" << ib+1 << "\t" << x << "\t" << y << "\t" << yerr/sqrt(y) << endl;
-                        }
-                    }
-                }
-                out.close();
-            }
-        }
 
         // ----------- loading dEta histos:
         void LoadDEta(){
 
+            int rebin_pta=0;
+            TString cta;
             MTools * mt = new MTools();
+
+            // ------------------------------
+            // loading histos and summing phi/vertex bins
             for(int iptt=1; iptt<fNumPtt; iptt++){
                 for(int ipta=0; ipta<fNumPta; ipta++){
                     if( fPTt->At(iptt) < fPTa->At(ipta) )
                         continue;
                     for(int ic=0; ic<fNumCent; ic++){
-                        hDEtaRaw[ic][iptt][ipta] = (TH1D*)fhDEtaNearRaw[ic][fVertexSkip][0][0][0]->Clone();
+                        cta = Form("C%.0fT%.0fA%.0f",fCent->At(ic), fPTt->At(iptt), fPTa->At(ipta) );
+
+                        hDEtaRaw[ic][iptt][ipta] = (TH1D*)fhDEtaNearRaw[ic][fVertexSkip][0][iptt][ipta]->Clone("hDEtaRawOLD_"+cta);
                         hDEtaRaw[ic][iptt][ipta]->Reset();
-                        hDEtaMix[ic][iptt][ipta] = (TH1D*)fhDEtaNearMix[ic][fVertexSkip][0][0][0]->Clone();
+                        hDEtaMix[ic][iptt][ipta] = (TH1D*)fhDEtaNearMix[ic][fVertexSkip][0][iptt][ipta]->Clone("hDEtaMixOLD_"+cta);
                         hDEtaMix[ic][iptt][ipta]->Reset();
 
                         // summing vertex and phiGap
@@ -149,41 +158,47 @@ class MSimpleCorr
                 } // PTa
             } // PTt
 
-            cout << "summing vertex+phi done... " << endl;
+            // ------------------------------
             // rebinning pTa bins
             // Currently       0.3, 1, 2, 3, 4, 5, 6, 8, 10
             // New should be   2, 3, 4, 6, 8 (specified above)
-            
+
             for(int ic=0; ic<fNumCent; ic++){
                 for(int iptt=1; iptt<fNumPtt; iptt++){
                     for(int ipta_new=0; ipta_new<fNumPtaPublished; ipta_new++){
                         if( fPTt->At(iptt) < fPtaPublishedBins[ipta_new] )
                             continue;
+                        cta = Form("C%.0fT%.0fA%.0f",fCent->At(ic), fPTt->At(iptt), fPtaPublishedBins[ipta_new] );
 
-                        hDEtaRawNew[ic][iptt][ipta_new] = (TH1D*) hDEtaRaw[ic][iptt][ipta_new]->Clone();
+                        hDEtaRawNew[ic][iptt][ipta_new] = (TH1D*) hDEtaRaw[ic][iptt][ipta_new]->Clone("hDEtaRaw_"+cta);
                         hDEtaRawNew[ic][iptt][ipta_new]->Reset();
 
-                        hDEtaMixNew[ic][iptt][ipta_new] = (TH1D*) hDEtaMix[ic][iptt][ipta_new]->Clone();
+                        hDEtaMixNew[ic][iptt][ipta_new] = (TH1D*) hDEtaMix[ic][iptt][ipta_new]->Clone("hDEtaMix_"+cta);
                         hDEtaMixNew[ic][iptt][ipta_new]->Reset();
 
-                        int rebin_pta = 0; // assuming similar bin widths, divide by the number of bins merged
+                        rebin_pta = 0; // assuming similar bin widths, divide by the number of bins merged
                         for(int ipta=0; ipta<fNumPta; ipta++){
                             if(fPTa->At(ipta+1)<=fPtaPublishedBins[ipta_new] or fPTa->At(ipta)>=fPtaPublishedBins[ipta_new+1])
                                 continue;
 
                             // omit pta 5-6, seems to be problematic
-                            if( fPTa->At(ipta)==5) continue;
+                            if( fPTa->At(ipta)==5 && fPTt->At(iptt)==4) continue;
                             // ---------------------------------
                             cout << fPTt->At(iptt) << "-" << fPTt->At(iptt+1) << endl;
                             cout << "\t" << fPtaPublishedBins[ipta_new] << "-" << fPtaPublishedBins[ipta_new+1] << endl;
                             cout << "\t\t" << fPTa->At(ipta) << "-" <<  fPTa->At(ipta+1) << endl;
+
+                            // ---------------------------------
+                            ++rebin_pta;
+
                             cout << "\t\t\t";
                             hDEtaRaw[ic][iptt][ipta]->Print();
-                            // ---------------------------------
-                            rebin_pta++;
-                            if( rebin_pta > 1) cout << "bin should be normalized" << endl;
+                            cout << "\t\t\t";
+                            hDEtaMix[ic][iptt][ipta]->Print();
+
                             hDEtaRawNew[ic][iptt][ipta_new]->Add( hDEtaRaw[ic][iptt][ipta] );
                             hDEtaMixNew[ic][iptt][ipta_new]->Add( hDEtaMix[ic][iptt][ipta] );
+
                         } // PTa
                     } // PTa rebinned
                 } // PTt
@@ -200,11 +215,12 @@ class MSimpleCorr
                         // correct with lowest PTa mixed event, since substantially 
                         // similar to higher PTa bins with much better stat.
                         hDEtaRealNew[ic][iptt][ipta_new]=(TH1D*)hDEtaRawNew[ic][iptt][ipta_new]->Clone();
-                        ipta_new==0 ? hDEtaRealNew[ic][iptt][ipta_new]->Divide( hDEtaMixNew[ic][iptt][0] ) : hDEtaRealNew[ic][iptt][ipta_new]->Divide( hDEtaMixNew[ic][iptt][1] ); // dividing with pta: 3-4 (except in bin 2-3
+                        hDEtaRealNew[ic][iptt][ipta_new]->Divide( hDEtaMixNew[ic][iptt][1] );
 
                         // scale with ntrigg. and correct for rebinning
                         hDEtaRealNew[ic][iptt][ipta_new]->Scale(1./NTrigg[ic][iptt], "width" );
                         hDEtaRawNew[ic][iptt][ipta_new]->Scale(1./NTrigg[ic][iptt], "width" );
+
 //                        hDEtaRawNew[ic][iptt][ipta_new]->Scale(1./float(rebin_pta));
 //                        hDEtaMixNew[ic][iptt][ipta_new]->Scale(1./float(rebin_pta));
 //                        hDEtaRealNew[ic][iptt][ipta_new]->Scale(1./float(rebin_pta));
@@ -231,11 +247,17 @@ class MSimpleCorr
         MFit * mfit_gc[5][5][5];    // Gauss+Const.: [Cent][PTt][PTa]
         MFit * mfit_ggc[5][5][5];   // Gen.Gauss+Const.: [Cent][PTt][PTa]
         MFit * mfit_kc[5][5][5];    // Kaplan+Const: [Cent][PTt][PTa]
-        TH1D * htmp;
-        int ifit=0;
 
-        void FitRebinned() {
+        void FitRebinned(TString opt="EMRNS") {
+            int ifit=0;
+            int int_binmin, int_binmax;
+            double val, valerr;
+            double fitmin=0, fitmax=1.6;
+            double int_min=0, int_max=0.4;
+            TH1D * htmp;
+            
             MTools * mt = new MTools();
+
             for(int ic=0; ic<fNumCent; ic++){
                 for(int iptt=1; iptt<fNumPtt; iptt++){
                     hYield[0][ic][iptt] = new TH1D(Form("hYield_GaussConst_C0%dT0%d",ic,iptt), "", fNumPtaPublished, fPtaPublishedBins);
@@ -250,43 +272,59 @@ class MSimpleCorr
                         if( fPTt->At(iptt) < fPtaPublishedBins[ipta] )
                             continue;
 
-                        mfit_gc[ic][iptt][ipta]  = new MFit(ifit++,0,0,hDEtaRealFlip[ic][iptt][ipta], 0, 1.6, true);
-                        mfit_ggc[ic][iptt][ipta] = new MFit(ifit++,0,0,hDEtaRealFlip[ic][iptt][ipta], 0, 1.6, false);
-                        mfit_kc[ic][iptt][ipta]  = new MFit(ifit++,3,0,hDEtaRealFlip[ic][iptt][ipta], 0, 1.6);
+                        mfit_gc[ic][iptt][ipta]  = new MFit(0,0,hDEtaRealFlip[ic][iptt][ipta], fitmin, fitmax, true);
+                        mfit_ggc[ic][iptt][ipta] = new MFit(0,0,hDEtaRealFlip[ic][iptt][ipta], fitmin, fitmax, false);
+                        mfit_kc[ic][iptt][ipta]  = new MFit(2,0,hDEtaRealFlip[ic][iptt][ipta], fitmin, fitmax);
 
-                        MFit * mfit_gc_container = new MFit(ifit++,0,0,hDEtaRealFlip[ic][iptt][ipta], 0, 1.6, true);
-                        MFit * mfit_kc_container = new MFit(ifit++,3,0,hDEtaRealFlip[ic][iptt][ipta], 0, 1.6);
+                        MFit * mfit_gc_container = new MFit(0,0,hDEtaRealFlip[ic][iptt][ipta], fitmin, fitmax, true);
+                        MFit * mfit_kc_container = new MFit(2,0,hDEtaRealFlip[ic][iptt][ipta], fitmin, fitmax);
 
                         // Gauss + Constant 
-                        hDEtaRealFlip[ic][iptt][ipta]->Fit( mfit_gc[ic][iptt][ipta]->ffit, "EMRNS" );
+                        hDEtaRealFlip[ic][iptt][ipta]->Fit( mfit_gc[ic][iptt][ipta]->ffit, opt );
                         hYield[0][ic][iptt]->SetBinContent(ipta+1, mfit_gc[ic][iptt][ipta]->ffit->GetParameter(1) );
                         hYield[0][ic][iptt]->SetBinError(ipta+1, mfit_gc[ic][iptt][ipta]->ffit->GetParError(1) );
+                        //mfit_gc_container->ffit->SetParameters( mfit_gc[ic][iptt][ipta]->ffit->GetParameters() );
+                        //mfit_gc_container->ffit->SetParameter(0,0);
+                        //hYield[0][ic][iptt]->SetBinContent(ipta+1, mfit_gc_container->ffit->Integral(0, 0.6 ) );
+                        //hYield[0][ic][iptt]->SetBinError(ipta+1, mfit_gc_container->ffit->IntegralError(0, 0.6) );
 
                         htmp = (TH1D*) hDEtaRealFlip[ic][iptt][ipta]->Clone();
+                        int_binmin = htmp->GetXaxis()->FindBin(int_min);
+                        int_binmax = htmp->GetXaxis()->FindBin(int_max);
                         mt->subtractConstTH1( htmp,  mfit_gc[ic][iptt][ipta]->ffit->GetParameter(0) );
-                        hYield_Int[0][ic][iptt]->SetBinContent(ipta+1, htmp->Integral());
+                        val = htmp->IntegralAndError(int_binmin, int_binmax, valerr);
+                        hYield_Int[0][ic][iptt]->SetBinContent(ipta+1, val);
+                        hYield_Int[0][ic][iptt]->SetBinError(ipta+1, valerr);
 
                         // Generalized Gauss + Constant 
-                        hDEtaRealFlip[ic][iptt][ipta]->Fit( mfit_ggc[ic][iptt][ipta]->ffit, "EMRNS" );
-                        hYield[1][ic][iptt]->SetBinContent(ipta+1, mfit_ggc[ic][iptt][ipta]->ffit->GetParameter(1) );
-                        hYield[1][ic][iptt]->SetBinError(ipta+1, mfit_ggc[ic][iptt][ipta]->ffit->GetParError(1) );
+                        hDEtaRealFlip[ic][iptt][ipta]->Fit( mfit_ggc[ic][iptt][ipta]->ffit, opt );
+                        hYield[1][ic][iptt]->SetBinContent(ipta+1,mfit_ggc[ic][iptt][ipta]->ffit->GetParameter(1) );
+                        hYield[1][ic][iptt]->SetBinError(ipta+1,mfit_ggc[ic][iptt][ipta]->ffit->GetParError(1) );
+                        //mfit_gc_container->ffit->SetParameters( mfit_gc[ic][iptt][ipta]->ffit->GetParameters() );
+                        //mfit_gc_container->ffit->SetParameter(0,0);
+                        //hYield[1][ic][iptt]->SetBinContent(ipta+1, mfit_gc_container->ffit->Integral(0, 0.6 ) );
+                        //hYield[1][ic][iptt]->SetBinError(ipta+1, mfit_gc_container->ffit->IntegralError(0, 0.6) );
 
                         htmp = (TH1D*) hDEtaRealFlip[ic][iptt][ipta]->Clone();
                         mt->subtractConstTH1( htmp,  mfit_ggc[ic][iptt][ipta]->ffit->GetParameter(0) );
-                        hYield_Int[1][ic][iptt]->SetBinContent(ipta+1, htmp->Integral());
+                        val = htmp->IntegralAndError(int_binmin, int_binmax, valerr);
+                        hYield_Int[1][ic][iptt]->SetBinContent(ipta+1, val);
+                        hYield_Int[1][ic][iptt]->SetBinError(ipta+1, valerr);
 
                         // Kaplan + Constant 
-                        hDEtaRealFlip[ic][iptt][ipta]->Fit( mfit_kc[ic][iptt][ipta]->ffit, "EMRNS" );
+                        hDEtaRealFlip[ic][iptt][ipta]->Fit( mfit_kc[ic][iptt][ipta]->ffit, opt );
                         mfit_kc_container->ffit->SetParameters( mfit_kc[ic][iptt][ipta]->ffit->GetParameters() );
                         mfit_kc_container->ffit->SetParameter(0, 0); // set const. to 0 then integrate
-                        double val = mfit_kc_container->ffit->Integral(1e-2, 1.1);
-                        double valerr = mfit_kc_container->ffit->IntegralError(1e-2, 1.1);
+                        val = mfit_kc_container->ffit->Integral(0, 0.6);
+                        valerr = mfit_kc_container->ffit->IntegralError(0, 0.6);
                         hYield[2][ic][iptt]->SetBinContent(ipta+1, val);
                         hYield[2][ic][iptt]->SetBinError(ipta+1, valerr );
 
                         htmp = (TH1D*) hDEtaRealFlip[ic][iptt][ipta]->Clone();
                         mt->subtractConstTH1( htmp,  mfit_kc[ic][iptt][ipta]->ffit->GetParameter(0) );
-                        hYield_Int[2][ic][iptt]->SetBinContent(ipta+1, htmp->Integral());
+                        val = htmp->IntegralAndError(int_binmin, int_binmax, valerr);
+                        hYield_Int[2][ic][iptt]->SetBinContent(ipta+1, val);
+                        hYield_Int[2][ic][iptt]->SetBinError(ipta+1, valerr);
 
                         // fix constant of Kaplan from Gaussian fit:
                         // mfit_kc[ic][iptt][ipta]->ffit->FixParameter(0, mfit_gc[ic][iptt][ipta]->ffit->GetParameter(0) );
@@ -316,28 +354,30 @@ class MSimpleCorr
             cout << "Writing output to: " << fOutFileName << endl;
 
             // write ntrigg and yield
+            TString ct, cta;
             for(int ic=0; ic<fNumCent; ic++){
                 for(int iptt=1; iptt<fNumPtt; iptt++){
-                    hTriggVSum[ic][iptt]->Write(Form("hTrigg_C0%dT0%.0f",   ic, fPTt->At(iptt)));
+                    ct = Form("C%.0fT%.0f",fCent->At(ic), fPTt->At(iptt) );
 
-                    hYield[0][ic][iptt]->Write(Form("hYield_GC_C0%dT0%.0f", ic, fPTt->At(iptt)));
-                    hYield[1][ic][iptt]->Write(Form("hYield_GGC_C0%dT0%.0f", ic, fPTt->At(iptt)));
-                    hYield[2][ic][iptt]->Write(Form("hYield_KC_C0%dT0%.0f", ic, fPTt->At(iptt)));
+                    hTriggVSum[ic][iptt]->Write("hTrigg_"+ct);
 
-                    hYield_Int[0][ic][iptt]->Write(Form("hYield_INT_GC_C0%dT0%.0f", ic, fPTt->At(iptt)));
-                    hYield_Int[1][ic][iptt]->Write(Form("hYield_INT_GGC_C0%dT0%.0f", ic, fPTt->At(iptt)));
-                    hYield_Int[2][ic][iptt]->Write(Form("hYield_INT_KC_C0%dT0%.0f", ic, fPTt->At(iptt)));
+                    hYield[0][ic][iptt]->Write("hYield_GC_"+ct);
+                    hYield[1][ic][iptt]->Write("hYield_GGC_"+ct);
+                    hYield[2][ic][iptt]->Write("hYield_KC_"+ct);
+
+                    hYield_Int[0][ic][iptt]->Write("hYield_INT_GC_"+ct);
+                    hYield_Int[1][ic][iptt]->Write("hYield_INT_GGC_"+ct);
+                    hYield_Int[2][ic][iptt]->Write("hYield_INT_KC_"+ct);
                 }
             }
 
             // write eta histograms and fits (only rebinned)
-            TString cta = "";
             for(int iptt=1; iptt<fNumPtt; iptt++){
                 for(int ipta=0; ipta<fNumPtaPublished; ipta++){
                     if(fPTt->At(iptt) < fPtaPublishedBins[ipta]) 
                         continue;
                     for(int ic=0; ic<fNumCent; ic++){
-                        cta = Form("C0%dT0%.fA0%.0f",ic, fPTt->At(iptt), fPtaPublishedBins[ipta]);
+                        cta = Form("C%.0fT%.0fA%.0f",fCent->At(ic), fPTt->At(iptt), fPtaPublishedBins[ipta]);
 
                         hDEtaRawNew[ic][iptt][ipta]->Write("hDEtaRaw_"+cta); 
                         hDEtaMixNew[ic][iptt][ipta]->Write("hDEtaMix_"+cta);
@@ -366,38 +406,39 @@ void processSimpleCorr() {
     
     // Loading PbPb
     //
-    InFileName[1] = "JDiHadronCorr_legotrain_allTrigg-CF_PbPb-1815_20151006-1625_runlist_1-LHC10h_AOD86_MgFpMgFm.root"; //this contains TPCOnly cut
-    //InFileName[1] = "JDiHadronCorr_legotrain_allTrigg-CF_PbPb-1599_20150827-0946_runlist_2-LHC10h_AOD86_MgFpMgFm.root"; //this contains TPCOnly cut
+//    InFileName[1] = "JDiHadronCorr_legotrain_allTrigg-CF_PbPb-1815_20151006-1625_runlist_1-LHC10h_AOD86_MgFpMgFm.root"; 
+//
+    InFileName[1] = "JDiHadronCorr_legotrain_allTrigg-CF_PbPb-1599_20150827-0946_runlist_2-LHC10h_AOD86_MgFpMgFm.root"; //this contains TPCOnly cut
     //InFileName[1] = "JDiHadronCorr_legotrain_allTrigg-CF_PbPb-1815_20151006-1625_runlist_3-LHC10h_AOD86_MgFpMgFm.root"; //this contains TPCOnly cut
 
-    Period[1]="LHC10h"; AOD[1]="86"; RL[1]="1"; Comment[1]=""; TrackCut[1]="TPCOnly";    
+    Period[1]="LHC10h"; AOD[1]="86"; RL[1]="2"; Comment[1]=""; TrackCut[1]="TPCOnly";    
 
     // Loading pp
-    //InFileName[0] = "JDiHadronCorr_legotrain_allTrigg-CF_pp-726_20150918-2352-2760GeV_LHC11a_p4_AOD113_noSDD.root";
-    //Period[0]="LHC11a"; AOD[0]="113"; RL[0]="0"; Comment[0]="noSDD"; TrackCut[0]="GlobalSDD";    
+//    InFileName[0] = "JDiHadronCorr_legotrain_allTrigg-CF_pp-726_20150918-2352-2760GeV_LHC11a_p4_AOD113_noSDD.root";
+//    Period[0]="LHC11a"; AOD[0]="113"; RL[0]="0"; Comment[0]="noSDD"; TrackCut[0]="GlobalSDD";    
     InFileName[0] = "JDiHadronCorr_legotrain_allTrigg-CF_pp-727_20150918-2352-2760GeV_LHC11a_p4_AOD113_withSDD.root";
     Period[0]="LHC11a"; AOD[0]="113"; RL[0]="0"; Comment[0]="withSDD"; TrackCut[0]="GlobalSDD";    
 
     MSimpleCorr * msc[2][5][5];     // [Type][VertexSkip][PhiSkip]
 
+    TString fitopt = "ERNS";
     for(int itype=0; itype<2; itype++){
         msc[itype][0][0] = new MSimpleCorr(jInDir+InFileName[itype], TrackCut[itype], -8, 1.6 );
         msc[itype][0][0]->LoadDEta();
-        msc[itype][0][0]->FitRebinned();
+        msc[itype][0][0]->FitRebinned(fitopt);
         msc[itype][0][0]->WriteOutput(Period[itype], AOD[itype], RL[itype]);
+        delete msc[itype][0][0];
 
         msc[itype][0][1] = new MSimpleCorr(jInDir+InFileName[itype], TrackCut[itype], -8, 0.5 );
         msc[itype][0][1]->LoadDEta();
-        msc[itype][0][1]->FitRebinned();
+        msc[itype][0][1]->FitRebinned(fitopt);
         msc[itype][0][1]->WriteOutput(Period[itype], AOD[itype], RL[itype]);
+        delete msc[itype][0][1];
 
         msc[itype][0][2] = new MSimpleCorr(jInDir+InFileName[itype], TrackCut[itype], -8, 0.2 );
         msc[itype][0][2]->LoadDEta();
-        msc[itype][0][2]->FitRebinned();
+        msc[itype][0][2]->FitRebinned(fitopt);
         msc[itype][0][2]->WriteOutput(Period[itype], AOD[itype], RL[itype]);
-
-        delete msc[itype][0][0];
-        delete msc[itype][0][1];
         delete msc[itype][0][2];
     }
 }
